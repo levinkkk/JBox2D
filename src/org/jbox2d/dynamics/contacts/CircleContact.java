@@ -31,10 +31,13 @@ import org.jbox2d.collision.ManifoldPoint;
 import org.jbox2d.collision.shapes.CircleShape;
 import org.jbox2d.collision.shapes.Shape;
 import org.jbox2d.collision.shapes.ShapeType;
-import org.jbox2d.common.ObjectPool;
 import org.jbox2d.common.Vec2;
 import org.jbox2d.dynamics.Body;
 import org.jbox2d.dynamics.ContactListener;
+import org.jbox2d.pooling.SingletonPool;
+import org.jbox2d.pooling.TLContactPoint;
+import org.jbox2d.pooling.TLManifold;
+import org.jbox2d.pooling.TLVec2;
 
 // Updated to rev 142 of b2CircleContact.h/cpp
 
@@ -79,11 +82,10 @@ public class CircleContact extends Contact implements ContactCreateFcn {
 	public void destructor() {
 
 	}
-
-	//djm pooled lets see if this workds
-	private static final Manifold m0 = new Manifold();
-	private static final Vec2 v1 = new Vec2();
-	private static final ContactPoint cp = new ContactPoint();
+	
+	private static final TLManifold tlm0 = new TLManifold();
+	private static final TLVec2 tlV1 = new TLVec2();
+	private static final TLContactPoint tlCp = new TLContactPoint();
 	@Override
 	public void evaluate(final ContactListener listener) {
 		//CollideCircle.collideCircle(m_manifold, (CircleShape) m_shape1,
@@ -91,21 +93,13 @@ public class CircleContact extends Contact implements ContactCreateFcn {
 		final Body b1 = m_shape1.getBody();
 		final Body b2 = m_shape2.getBody();
 
+		final Manifold m0 = tlm0.get();
+		final Vec2 v1 = tlV1.get();
+		final ContactPoint cp = tlCp.get();
 
 		m0.set(m_manifold);
-		//Manifold m0 = new Manifold(m_manifold);  djm all this should have been taken care of with set
-		/*for (int k = 0; k < m_manifold.pointCount; k++) {
-            m0.points[k] = new ManifoldPoint(m_manifold.points[k]);
-            m0.points[k].normalImpulse = m_manifold.points[k].normalImpulse;
-            m0.points[k].tangentImpulse = m_manifold.points[k].tangentImpulse;
-            m0.points[k].separation = m_manifold.points[k].separation;
-            //m0.points[k].id.key = m_manifold.points[k].id.key;
-            m0.points[k].id.features.set(m_manifold.points[k].id.features);
-            //System.out.println(m_manifold.points[k].id.key);
-        }
-        m0.pointCount = m_manifold.pointCount;*/
 
-		ObjectPool.getCollideCircle().collideCircles(m_manifold, (CircleShape)m_shape1, b1.m_xf, (CircleShape)m_shape2, b2.m_xf);
+		SingletonPool.getCollideCircle().collideCircles(m_manifold, (CircleShape)m_shape1, b1.m_xf, (CircleShape)m_shape2, b2.m_xf);
 
 		cp.shape1 = m_shape1;
 		cp.shape2 = m_shape2;

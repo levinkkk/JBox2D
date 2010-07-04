@@ -42,7 +42,7 @@ import org.jbox2d.collision.shapes.Shape;
 import org.jbox2d.collision.shapes.ShapeType;
 import org.jbox2d.common.Color3f;
 import org.jbox2d.common.Mat22;
-import org.jbox2d.common.ObjectPool;
+import org.jbox2d.common.MathUtils;
 import org.jbox2d.common.RaycastResult;
 import org.jbox2d.common.Settings;
 import org.jbox2d.common.Vec2;
@@ -58,6 +58,10 @@ import org.jbox2d.dynamics.joints.JointDef;
 import org.jbox2d.dynamics.joints.JointEdge;
 import org.jbox2d.dynamics.joints.JointType;
 import org.jbox2d.dynamics.joints.PulleyJoint;
+import org.jbox2d.pooling.TLTimeStep;
+import org.jbox2d.pooling.stacks.IslandStack;
+import org.jbox2d.pooling.stacks.TimeStepStack;
+
 
 //Updated to rev 56->118->142->150 of b2World.cpp/.h
 
@@ -121,6 +125,23 @@ public class World {
 	private float m_inv_dt0;
 
 	private final ArrayList<Steppable> postStepList;
+
+	private boolean autoDebugDraw = true;
+	
+	
+	/**
+	 * @return the autoDebugDraw
+	 */
+	public boolean isAutoDebugDraw() {
+		return autoDebugDraw;
+	}
+
+	/**
+	 * @param autoDebugDraw the autoDebugDraw to set
+	 */
+	public void setAutoDebugDraw(boolean autoDebugDraw) {
+		this.autoDebugDraw = autoDebugDraw;
+	}
 
 	public void setDrawDebugData(final boolean tf) {
 		m_drawDebugData = tf;
@@ -213,7 +234,7 @@ public class World {
 		m_lock = false;
 
 		m_allowSleep = doSleep;
-		
+
 		m_gravity = gravity;
 
 		m_contactManager = new ContactManager();
@@ -523,6 +544,8 @@ public class World {
 		--m_controllerCount;
 	}
 
+	// djm pooling
+	private static final TLTimeStep tlStep = new TLTimeStep();
 	/**
 	 * Take a time step. This performs collision detection, integration,
 	 * and constraint solution.
@@ -532,7 +555,7 @@ public class World {
 	public void step(final float dt, final int iterations) {
 		m_lock = true;
 
-		final TimeStep step = ObjectPool.getTimeStep();
+		final TimeStep step = tlStep.get();
 		step.dt = dt;
 		step.maxIterations	= iterations;
 		if (dt > 0.0f) {
@@ -560,12 +583,12 @@ public class World {
 		}
 
 		// Draw debug information.
-		drawDebugData();
+		if(autoDebugDraw){
+			drawDebugData();			
+		}
 
 		m_inv_dt0 = step.inv_dt;
 		m_lock = false;
-		
-		ObjectPool.returnTimeStep(step);
 		
 		postStep(dt,iterations);
 	}
@@ -610,16 +633,16 @@ public class World {
 	 * The number of shapes found is returned.
 	 * @param aabb the query box.
 	 * @param maxCount the capacity of the shapes array.
-	 * @param returning returning array of shapes overlapped, up to maxCount in length
+	 * @return array of shapes overlapped, up to maxCount in length
 	 */
 	public Shape[] query(final AABB aabb, final int maxCount) {
 		final Object[] objs = m_broadPhase.query(aabb, maxCount);
 		final Shape[] ret = new Shape[objs.length];
 		System.arraycopy(objs, 0, ret, 0, objs.length);
-//		for (int i=0; i<ret.length; ++i) {
-//			ret[i] = (Shape)(objs[i]);
-//		}
-		
+		//for (int i=0; i<ret.length; ++i) {
+		//	ret[i] = (Shape)(objs[i]);
+		//}
+
 		return ret;
 	}
 
@@ -630,6 +653,9 @@ public class World {
 	// Java note: sorry, guys, we have to keep this stuff public until
 	// the C++ version does otherwise so that we can maintain the engine...
 
+	// djm pooling
+	private static final IslandStack islands = new IslandStack();
+	
 	/** For internal use */
 	public void solve(final TimeStep step) {
 		m_positionIterationCount = 0;
@@ -640,8 +666,8 @@ public class World {
 		}
 
 		// Size the island for the worst case.
-		// TODO make this able to be pooled
-		final Island island = new Island(m_bodyCount, m_contactCount, m_jointCount, m_contactListener);
+		final Island island = islands.get();
+		island.init(m_bodyCount, m_contactCount, m_jointCount, m_contactListener);
 
 		// Clear all the island flags.
 		for (Body b = m_bodyList; b != null; b = b.m_next) {
@@ -735,7 +761,7 @@ public class World {
 
 			island.solve(step, m_gravity, m_positionCorrection, m_allowSleep);
 
-			m_positionIterationCount = Math.max(m_positionIterationCount, Island.m_positionIterationCount);
+			m_positionIterationCount = MathUtils.max(m_positionIterationCount, Island.m_positionIterationCount);
 
 			// Post solve cleanup.
 			for (int i = 0; i < island.m_bodyCount; ++i) {
@@ -773,15 +799,23 @@ public class World {
 		// Commit shape proxy movements to the broad-phase so that new contacts are created.
 		// Also, some contacts can be destroyed.
 		m_broadPhase.commit();
-
+		
+		islands.recycle(island);
 	}
 
+	
+	// djm pooling
+	private static final TimeStepStack steps = new TimeStepStack();
+	
 	/** For internal use: find TOI contacts and solve them. */
 	public void solveTOI(final TimeStep step) {
 		// Reserve an island and a stack for TOI island solution.
 		// djm do we always have to make a new island? or can we make
 		// it static?
-		final Island island = new Island(m_bodyCount, Settings.maxTOIContactsPerIsland, Settings.maxTOIJointsPerIsland, m_contactListener);
+		
+		// Size the island for the worst case.
+		final Island island = islands.get();
+		island.init(m_bodyCount, Settings.maxTOIContactsPerIsland, Settings.maxTOIJointsPerIsland, m_contactListener);
 
 		//Simple one pass queue
 		//Relies on the fact that we're only making one pass
@@ -853,7 +887,7 @@ public class World {
 					assert(0.0f <= toi && toi <= 1.0f);
 
 					if (toi > 0.0f && toi < 1.0f) {
-						toi = Math.min((1.0f - toi) * t0 + toi, 1.0f);
+						toi = MathUtils.min((1.0f - toi) * t0 + toi, 1.0f);
 					}
 
 					c.m_toi = toi;
@@ -996,8 +1030,7 @@ public class World {
 
 			}
 
-			// djm do we need to create one every time?
-			final TimeStep subStep = new TimeStep();
+			final TimeStep subStep = steps.get();
 			subStep.warmStarting = false;
 			subStep.dt = (1.0f - minTOI) * step.dt;
 			assert(subStep.dt > Settings.EPSILON);
@@ -1005,7 +1038,8 @@ public class World {
 			subStep.maxIterations = step.maxIterations;
 
 			island.solveTOI(subStep);
-
+			steps.recycle(subStep);
+			
 			// Post solve cleanup.
 			for (int i = 0; i < island.m_bodyCount; ++i) {
 				// Allow bodies to participate in future TOI islands.
@@ -1054,7 +1088,7 @@ public class World {
 			// Also, some contacts can be destroyed.
 			m_broadPhase.commit();
 		}
-
+		islands.recycle(island);
 	}
 	
 	// NOTE this corresponds to the liquid test, so the debugdraw can draw
@@ -1412,6 +1446,17 @@ public class World {
 	Object m_raycastUserData;
 	boolean m_raycastSolidShape;
 	
+	/** 
+	 * Query the world for all fixtures that intersect a given segment. You provide a shape
+	 * pointer buffer of specified size. The number of shapes found is returned, and the buffer
+	 * is filled in order of intersection
+	 * @param segment defines the begin and end point of the ray cast, from p1 to p2.
+	 * @param shapes a user allocated shape pointer array of size maxCount (or greater).
+	 * @param maxCount the capacity of the shapes array
+	 * @param solidShapes determines if shapes that the ray starts in are counted as hits.
+	 * @param userData passed through the worlds contact filter, with method RayCollide. This can be used to filter valid shapes
+	 * @return the number of shapes found
+	 */
 	public int raycast(Segment segment, Shape[] shapes, int maxCount, boolean solidShapes, Object userData)
 	{
 		m_raycastSegment = segment;
@@ -1430,6 +1475,17 @@ public class World {
 		return count;
 	}
 
+	/** 
+	 * Performs a ray-cast as with {@link #raycast(Segment, Shape[], int, boolean, Object)}, finding the first intersecting shape
+	 * @param segment defines the begin and end point of the ray cast, from p1 to p2
+	 * @param lambda returns the hit fraction. You can use this to compute the contact point
+	 * p = (1 - lambda) * segment.p1 + lambda * segment.p2.
+	 * @param normal returns the normal at the contact point. If there is no intersection, the normal
+	 * is not set.
+	 * @param solidShapes determines if shapes that the ray starts in are counted as hits.
+	 * @returns the colliding shape shape, or null if not found
+	 * @see #raycast(Segment, Shape[], int, boolean, Object)
+	 */
 	public Shape raycastOne(Segment segment, RaycastResult result, boolean solidShapes, Object userData)
 	{
 		int maxCount = 1;

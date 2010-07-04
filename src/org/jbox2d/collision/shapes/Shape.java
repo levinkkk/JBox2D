@@ -23,6 +23,9 @@
 
 package org.jbox2d.collision.shapes;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import org.jbox2d.collision.AABB;
 import org.jbox2d.collision.BroadPhase;
 import org.jbox2d.collision.FilterData;
@@ -30,11 +33,13 @@ import org.jbox2d.collision.MassData;
 import org.jbox2d.collision.PairManager;
 import org.jbox2d.collision.Segment;
 import org.jbox2d.collision.SegmentCollide;
-import org.jbox2d.common.ObjectPool;
 import org.jbox2d.common.RaycastResult;
 import org.jbox2d.common.Vec2;
 import org.jbox2d.common.XForm;
 import org.jbox2d.dynamics.Body;
+import org.jbox2d.dynamics.contacts.Contact;
+import org.jbox2d.dynamics.contacts.ContactEdge;
+import org.jbox2d.pooling.TLAABB;
 
 
 //Updated through rev. 56->139 of b2Shape.cpp/.h
@@ -234,6 +239,8 @@ public abstract class Shape {
 	/** Internal */
 	public abstract void updateSweepRadius(Vec2 center);
 
+	// djm pooling
+	private static final TLAABB tlAabb = new TLAABB();
 	/** Internal */
 	public boolean synchronize(final BroadPhase broadPhase, final XForm transform1, final XForm transform2) {
 		if (m_proxyId == PairManager.NULL_PROXY) {
@@ -241,7 +248,7 @@ public abstract class Shape {
 		}
 
 		// Compute an AABB that covers the swept shape (may miss some rotation effect).
-		AABB aabb = ObjectPool.getAABB();
+		AABB aabb = tlAabb.get();
 		computeSweptAABB(aabb, transform1, transform2);
 		//if (this.getType() == ShapeType.CIRCLE_SHAPE){
 		//	System.out.println("Sweeping: "+transform1+" " +transform2);
@@ -249,10 +256,8 @@ public abstract class Shape {
 		//}
 		if (broadPhase.inRange(aabb)) {
 			broadPhase.moveProxy(m_proxyId, aabb);
-			ObjectPool.returnAABB(aabb);
 			return true;
 		} else {
-			ObjectPool.returnAABB(aabb);
 			return false;
 		}
 	}
@@ -370,5 +375,41 @@ public abstract class Shape {
 	 */
 	public float getDensity() {
 		return m_density;
+	}
+	
+	/**
+	 * @return a Set<Shape> of all shapes in contact with this one
+	 */
+	public Set<Shape> getShapesInContact() {
+		ContactEdge curr = this.m_body.getContactList();
+		Set<Shape> touching = new HashSet<Shape>();
+		while (curr != null) {
+			if (curr.contact.m_shape1 == this) {
+				touching.add(curr.contact.m_shape2);
+			} else if (curr.contact.m_shape2 == this) {
+				touching.add(curr.contact.m_shape1);
+			}
+			curr = curr.next;
+		}
+		return touching;
+	}
+	
+	/**
+	 * @return a Set<Contact> of all (active) contacts involving this shape
+	 */
+	public Set<Contact> getContacts() {
+		ContactEdge curr = this.m_body.getContactList();
+		Set<Contact> contacts = new HashSet<Contact>();
+		while (curr != null) {
+			if (curr.contact.getManifoldCount() > 0) {
+				if (curr.contact.m_shape1 == this) {
+					contacts.add(curr.contact);
+				} else if (curr.contact.m_shape2 == this) {
+					contacts.add(curr.contact);
+				}
+			}
+			curr = curr.next;
+		}
+		return contacts;
 	}
 }

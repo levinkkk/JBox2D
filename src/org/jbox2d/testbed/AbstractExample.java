@@ -29,9 +29,9 @@ import org.jbox2d.collision.AABB;
 import org.jbox2d.collision.shapes.CircleDef;
 import org.jbox2d.collision.shapes.Shape;
 import org.jbox2d.common.Color3f;
+import org.jbox2d.common.OBBViewportTransform;
 import org.jbox2d.common.Settings;
 import org.jbox2d.common.Vec2;
-import org.jbox2d.common.ViewportTransform;
 import org.jbox2d.dynamics.Body;
 import org.jbox2d.dynamics.BodyDef;
 import org.jbox2d.dynamics.BoundaryListener;
@@ -103,7 +103,7 @@ public abstract class AbstractExample {
 	/** Listener for contact events. */
 	protected ContactListener m_contactListener;
 	
-	protected ViewportTransform viewport;
+	protected OBBViewportTransform viewport;
 	
 	public static Color3f white = new Color3f(255.0f,255.0f,255.0f);
 	public static Color3f black = new Color3f(0.0f*255.0f,0.0f*255.0f,0.0f*255.0f);
@@ -150,7 +150,9 @@ public abstract class AbstractExample {
     /**
      * @return Title of example.
      */
-	abstract public String getName();
+	public String getName() {
+		return this.getClass().getSimpleName();
+	}
     
 	/**
 	 * Create the world geometry for each test.
@@ -168,8 +170,12 @@ public abstract class AbstractExample {
 	public AbstractExample(TestbedMain _parent) {
 		parent = _parent;
 		m_debugDraw = parent.g;
-		viewport = m_debugDraw.getViewportTranform();
+		viewport = (OBBViewportTransform) m_debugDraw.getViewportTranform();
 		needsReset = true;
+	}
+	
+	public OBBViewportTransform getViewportTransform(){
+		return viewport;
 	}
 	
 	/** Override this if you need to create a different world AABB or gravity vector */
@@ -261,7 +267,7 @@ public abstract class AbstractExample {
 	 */
 	public void step() {
 		preStep();
-		viewport.getScreenToWorldToOut(mouseScreen, mouseWorld);
+		viewport.getScreenToWorld(mouseScreen, mouseWorld);
 		
 		float timeStep = settings.hz > 0.0f ? 1.0f / settings.hz : 0.0f;
 		
@@ -300,6 +306,10 @@ public abstract class AbstractExample {
 			m_world.destroyBody(m_bomb);
 			m_bomb = null;
 		}
+		
+		if (m_mouseJoint != null) {
+            m_mouseJoint.setTarget(mouseWorld);
+        }
 
 		if (settings.drawStats) {
 			m_debugDraw.drawString(5, m_textLine, "proxies(max) = "+m_world.getProxyCount()+
@@ -447,6 +457,16 @@ public abstract class AbstractExample {
     	}
     }
     
+    /** @return true if the point is within the world AABB, false otherwise. */
+    public boolean inRange(Vec2 worldPoint) {
+    	Vec2 minV = worldPoint.sub(new Vec2(0.1f,0.1f));
+    	Vec2 maxV = worldPoint.add(new Vec2(0.1f,0.1f));
+    	//AABB aabb = new AABB(minV, maxV);
+    	boolean inRange = (minV.x > m_worldAABB.lowerBound.x && minV.y > m_worldAABB.lowerBound.y
+    					&& maxV.x < m_worldAABB.upperBound.x && maxV.y < m_worldAABB.upperBound.y);
+    	return inRange;
+    }
+    
     //Shift+drag "slingshots" a bomb from any point using these functions
     /**
      * Begins spawning a bomb, spawn finishes and bomb is created upon calling completeBombSpawn().
@@ -465,7 +485,7 @@ public abstract class AbstractExample {
     	if (!bombSpawning) return;
     	final float multiplier = 30.0f;
     	Vec2 mouseW = new Vec2();
-    	viewport.getScreenToWorldToOut(mouseScreen, mouseW);
+    	viewport.getScreenToWorld(mouseScreen, mouseW);
     	Vec2 vel = bombSpawnPoint.sub(mouseW);
     	vel.mulLocal(multiplier);
     	launchBomb(bombSpawnPoint,vel);
@@ -499,7 +519,7 @@ public abstract class AbstractExample {
         aabb1.upperBound.addLocal(d);
         
         // Query the world for overlapping shapes.
-        int k_maxCount = 1;
+        int k_maxCount = 10;
         Shape shapes[] = m_world.query(aabb1, k_maxCount);
         
         Body body = null;
@@ -514,6 +534,53 @@ public abstract class AbstractExample {
             }
         }
         return body;
+    }
+    
+    public Body getStaticBodyAtPoint(Vec2 worldPoint) {
+    	aabb1.lowerBound.set(worldPoint);
+        aabb1.lowerBound.subLocal(d);
+        aabb1.upperBound.set(worldPoint);
+        aabb1.upperBound.addLocal(d);
+        
+        // Query the world for overlapping shapes.
+        int k_maxCount = 10;
+        Shape shapes[] = m_world.query(aabb1, k_maxCount);
+        
+        Body body = null;
+        for (int j = 0; j < shapes.length; j++) {
+            Body shapeBody = shapes[j].getBody();
+            if (shapeBody.isStatic() == true) {
+                boolean inside = shapes[j].testPoint(shapeBody.getMemberXForm(),worldPoint);
+                if (inside) {
+                    body = shapes[j].m_body;
+                    break;
+                }
+            }
+        }
+        return body;
+    }
+    
+    public Shape getStaticShapeAtPoint(Vec2 worldPoint) {
+    	aabb1.lowerBound.set(worldPoint);
+        aabb1.lowerBound.subLocal(d);
+        aabb1.upperBound.set(worldPoint);
+        aabb1.upperBound.addLocal(d);
+        
+        // Query the world for overlapping shapes.
+        int k_maxCount = 10;
+        Shape shapes[] = m_world.query(aabb1, k_maxCount);
+        
+        Body body = null;
+        for (int j = 0; j < shapes.length; j++) {
+            body = shapes[j].getBody();
+            if (body.isStatic() == true) {
+                boolean inside = shapes[j].testPoint(body.getMemberXForm(),worldPoint);
+                if (inside) {
+                    return shapes[j];
+                }
+            }
+        }
+        return null;
     }
     
     
@@ -550,12 +617,12 @@ public abstract class AbstractExample {
     	
     	if (parent.shiftKey) {
     		Vec2 vec = new Vec2();
-    		viewport.getScreenToWorldToOut(p, vec);
+    		viewport.getScreenToWorld(p, vec);
     		spawnBomb(vec);
     		return;
     	}
     	
-    	viewport.getScreenToWorldToOut(p, p);
+    	viewport.getScreenToWorld(p, p);
     	
     	if (m_mouseJoint != null) return;
 
@@ -614,18 +681,13 @@ public abstract class AbstractExample {
      */
     public void mouseMove(Vec2 p) {
     	mouseScreen.set(p);
-        if (m_mouseJoint != null) {
-        	Vec2 target = new Vec2();
-        	viewport.getScreenToWorldToOut(p, target);
-            m_mouseJoint.setTarget(target);
-        }
     }
     
     /**
      * @return the current world coordinates of the mouse.
      */
     public Vec2 getMouseWorld() {
-    	return viewport.getScreenToWorld(mouseScreen.x, mouseScreen.y);
+    	return m_debugDraw.getScreenToWorld(mouseScreen.x, mouseScreen.y);
     }
     
     /**

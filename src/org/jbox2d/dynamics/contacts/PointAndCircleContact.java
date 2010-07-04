@@ -32,10 +32,13 @@ import org.jbox2d.collision.shapes.CircleShape;
 import org.jbox2d.collision.shapes.PointShape;
 import org.jbox2d.collision.shapes.Shape;
 import org.jbox2d.collision.shapes.ShapeType;
-import org.jbox2d.common.ObjectPool;
 import org.jbox2d.common.Vec2;
 import org.jbox2d.dynamics.Body;
 import org.jbox2d.dynamics.ContactListener;
+import org.jbox2d.pooling.SingletonPool;
+import org.jbox2d.pooling.TLContactPoint;
+import org.jbox2d.pooling.TLManifold;
+import org.jbox2d.pooling.TLVec2;
 
 // Updated to rev 142 of b2CircleContact.h/cpp
 
@@ -81,20 +84,23 @@ public class PointAndCircleContact extends Contact implements ContactCreateFcn {
 
 	}
 
-	// djm pooled
-	private final static Manifold m0 = new Manifold();
-	private final static Vec2 v1 = new Vec2();
-	private final static ContactPoint cp = new ContactPoint();
+	// djm pooling
+	private static final TLManifold tlm0 = new TLManifold();
+	private static final TLVec2 tlV1 = new TLVec2();
+	private static final TLContactPoint tlCp = new TLContactPoint();
+	
 	@Override
 	public void evaluate(final ContactListener listener) {
-		//CollideCircle.collideCircle(m_manifold, (CircleShape) m_shape1,
-		//        (CircleShape) m_shape2, false);
 		final Body b1 = m_shape1.getBody();
 		final Body b2 = m_shape2.getBody();
 
+		
+		final Manifold m0 = tlm0.get();
+		final Vec2 v1 = tlV1.get();
+		final ContactPoint cp = tlCp.get();
 		m0.set(m_manifold);
 
-		ObjectPool.getCollideCircle().collidePointAndCircle(m_manifold, (PointShape)m_shape1, b1.m_xf, (CircleShape)m_shape2, b2.m_xf);
+		SingletonPool.getCollideCircle().collidePointAndCircle(m_manifold, (PointShape)m_shape1, b1.m_xf, (CircleShape)m_shape2, b2.m_xf);
 		//        CollideCircle.collideCircles(m_manifold, (CircleShape)m_shape1, b1.m_xf, (CircleShape)m_shape2, b2.m_xf);
 
 		cp.shape1 = m_shape1;

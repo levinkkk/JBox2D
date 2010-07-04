@@ -29,6 +29,7 @@ import org.jbox2d.common.Settings;
 import org.jbox2d.common.Vec2;
 import org.jbox2d.dynamics.Body;
 import org.jbox2d.dynamics.TimeStep;
+import org.jbox2d.pooling.TLVec2;
 
 
 //Updated to rev. 56->130 of b2PulleyJoint.cpp/.h
@@ -122,18 +123,27 @@ public class PulleyJoint extends Joint {
 	}
 
 	// djm pooled
-	private final Vec2 r1 = new Vec2();
-	private final Vec2 r2 = new Vec2();
-	private final Vec2 p1 = new Vec2();
-	private final Vec2 p2 = new Vec2();
-	private final Vec2 s1 = new Vec2();
-	private final Vec2 s2 = new Vec2();
-	private final Vec2 P1 = new Vec2();
-	private final Vec2 P2 = new Vec2();
+	private static final TLVec2 tlr1 = new TLVec2();
+	private static final TLVec2 tlr2 = new TLVec2();
+	private static final TLVec2 tlp1 = new TLVec2();
+	private static final TLVec2 tlp2 = new TLVec2();
+	private static final TLVec2 tls1 = new TLVec2();
+	private static final TLVec2 tls2 = new TLVec2();
+	private static final TLVec2 tlP1 = new TLVec2();
+	private static final TLVec2 tlP2 = new TLVec2();
 	@Override
 	public void initVelocityConstraints(final TimeStep step) {
 		final Body b1 = m_body1;
 		final Body b2 = m_body2;
+		
+		final Vec2 r1 = tlr1.get();
+		final Vec2 r2 = tlr2.get();
+		final Vec2 p1 = tlp1.get();
+		final Vec2 p2 = tlp2.get();
+		final Vec2 s1 = tls1.get();
+		final Vec2 s2 = tls2.get();
+		final Vec2 P1 = tlP1.get();
+		final Vec2 P2 = tlP2.get();
 
 		r1.set(b1.getMemberLocalCenter());
 		r2.set(b2.getMemberLocalCenter());
@@ -231,13 +241,20 @@ public class PulleyJoint extends Joint {
 	}
 
 	// djm pooled, some from above
-	private final Vec2 v1 = new Vec2();
-	private final Vec2 v2 = new Vec2();
+	private static final TLVec2 tlv1 = new TLVec2();
+	private static final TLVec2 tlv2 = new TLVec2();
+	
 	@Override
 	public void solveVelocityConstraints(final TimeStep step) {
 		final Body b1 = m_body1;
 		final Body b2 = m_body2;
 
+		final Vec2 v1 = tlv1.get();
+		final Vec2 v2 = tlv2.get();
+		final Vec2 P1 = tlP1.get();
+		final Vec2 P2 = tlP2.get();
+		final Vec2 r1 = tlr1.get();
+		final Vec2 r2 = tlr2.get();
 
 		r1.set(b1.getMemberLocalCenter());
 		r2.set(b2.getMemberLocalCenter());
@@ -257,7 +274,7 @@ public class PulleyJoint extends Joint {
 			final float Cdot = -Vec2.dot(m_u1, v1) - m_ratio * Vec2.dot(m_u2, v2);
 			float force = -step.inv_dt * m_pulleyMass * Cdot;
 			final float oldForce = m_force;
-			m_force = Math.max(0.0f, m_force + force);
+			m_force = MathUtils.max(0.0f, m_force + force);
 			force = m_force - oldForce;
 
 			P1.set(m_u1);
@@ -280,7 +297,7 @@ public class PulleyJoint extends Joint {
 			final float Cdot = -Vec2.dot(m_u1, v1);
 			float force = -step.inv_dt * m_limitMass1 * Cdot;
 			final float oldForce = m_limitForce1;
-			m_limitForce1 = Math.max(0.0f, m_limitForce1 + force);
+			m_limitForce1 = MathUtils.max(0.0f, m_limitForce1 + force);
 			force = m_limitForce1 - oldForce;
 
 			//Vec2 P1 = m_u1.mul(-step.dt * force);
@@ -299,7 +316,7 @@ public class PulleyJoint extends Joint {
 			final float Cdot = -Vec2.dot(m_u2, v2);
 			float force = -step.inv_dt * m_limitMass2 * Cdot;
 			final float oldForce = m_limitForce2;
-			m_limitForce2 = Math.max(0.0f, m_limitForce2 + force);
+			m_limitForce2 = MathUtils.max(0.0f, m_limitForce2 + force);
 			force = m_limitForce2 - oldForce;
 
 			//Vec2 P2 = m_u2.mul(-step.dt * force);
@@ -318,6 +335,15 @@ public class PulleyJoint extends Joint {
 		final Body b1 = m_body1;
 		final Body b2 = m_body2;
 
+		final Vec2 r1 = tlr1.get();
+		final Vec2 r2 = tlr2.get();
+		final Vec2 p1 = tlp1.get();
+		final Vec2 p2 = tlp2.get();
+		final Vec2 s1 = tls1.get();
+		final Vec2 s2 = tls2.get();
+		final Vec2 P1 = tlP1.get();
+		final Vec2 P2 = tlP2.get();
+		
 		s1.set(m_ground.m_xf.position);
 		s1.addLocal(m_groundAnchor1);
 		s2.set(m_ground.m_xf.position);

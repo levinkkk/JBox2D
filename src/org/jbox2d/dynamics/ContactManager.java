@@ -33,6 +33,8 @@ import org.jbox2d.common.Vec2;
 import org.jbox2d.dynamics.contacts.Contact;
 import org.jbox2d.dynamics.contacts.ContactPoint;
 import org.jbox2d.dynamics.contacts.NullContact;
+import org.jbox2d.pooling.TLContactPoint;
+import org.jbox2d.pooling.TLVec2;
 
 
 //Updated to rev 56->104->142 of b2ContactManager.cpp/.h
@@ -146,9 +148,14 @@ public class ContactManager implements PairCallback {
 	}
 
 	// djm pooled
-	private final Vec2 v1 = new Vec2();
-	private final ContactPoint cp = new ContactPoint();
+	private static final TLVec2 tlV1 = new TLVec2();
+	private static final TLContactPoint tlCp = new TLContactPoint();
+	
 	public void destroy(final Contact c) {
+		
+		final Vec2 v1 = tlV1.get();
+		final ContactPoint cp = tlCp.get();
+		
 		final Shape shape1 = c.getShape1();
 		final Shape shape2 = c.getShape2();
 
@@ -227,6 +234,7 @@ public class ContactManager implements PairCallback {
 		// Call the factory.
 		Contact.destroy(c);
 		--m_world.m_contactCount;
+		
 	}
 
 	public void collide() {

@@ -29,6 +29,7 @@ import org.jbox2d.common.Settings;
 import org.jbox2d.common.Vec2;
 import org.jbox2d.dynamics.Body;
 import org.jbox2d.dynamics.TimeStep;
+import org.jbox2d.pooling.TLVec2;
 
 
 //Updated to rev 56->130 of b2PrismaticJoint.cpp/.h
@@ -113,19 +114,29 @@ public class PrismaticJoint extends Joint {
 	}
 
 	// djm pooled
-	private final Vec2 r1 = new Vec2();
-	private final Vec2 r2 = new Vec2();
-	private final Vec2 ax1 = new Vec2();
-	private final Vec2 ay1 = new Vec2();
-	private final Vec2 e = new Vec2();
-	private final Vec2 ax1Neg = new Vec2();
-	private final Vec2 ay1Neg = new Vec2();
-	private final Vec2 d = new Vec2();
+	private static final TLVec2 tlr1 = new TLVec2();
+	private static final TLVec2 tlr2 = new TLVec2();
+	private static final TLVec2 tlax1 = new TLVec2();
+	private static final TLVec2 tlay1 = new TLVec2();
+	private static final TLVec2 tle = new TLVec2();
+	private static final TLVec2 tlax1Neg = new TLVec2();
+	private static final TLVec2 tlay1Neg = new TLVec2();
+	private static final TLVec2 tld = new TLVec2();
+	
 	@Override
 	public void initVelocityConstraints(final TimeStep step) {
 		final Body b1 = m_body1;
 		final Body b2 = m_body2;
 
+		final Vec2 r1 = tlr1.get();
+		final Vec2 r2 = tlr2.get();
+		final Vec2 ax1 = tlax1.get();
+		final Vec2 ay1 = tlay1.get();
+		final Vec2 e = tle.get();
+		final Vec2 ax1Neg = tlax1Neg.get();
+		final Vec2 ay1Neg = tlay1Neg.get();
+		final Vec2 d = tld.get();
+		
 		// Compute the effective masses.
 		Mat22.mulToOut(b1.m_xf.R, m_localAnchor1.sub(b1.getMemberLocalCenter()), r1);
 		Mat22.mulToOut(b2.m_xf.R, m_localAnchor2.sub(b2.getMemberLocalCenter()), r2);
@@ -177,7 +188,7 @@ public class PrismaticJoint extends Joint {
 				//Vec2 d = e.sub(r1); // p2 - p1
 				final float jointTranslation = Vec2.dot(ax1, d);
 
-				if (Math.abs(m_upperTranslation - m_lowerTranslation) < 2.0f * Settings.linearSlop) {
+				if (MathUtils.abs(m_upperTranslation - m_lowerTranslation) < 2.0f * Settings.linearSlop) {
 					m_limitState = LimitState.EQUAL_LIMITS;
 				}
 				else if (jointTranslation <= m_lowerTranslation) {
@@ -312,11 +323,11 @@ public class PrismaticJoint extends Joint {
 				m_limitForce += limitForce;
 			} else if (m_limitState == LimitState.AT_LOWER_LIMIT) {
 				final float oldLimitForce = m_limitForce;
-				m_limitForce = Math.max(m_limitForce + limitForce, 0.0f);
+				m_limitForce = MathUtils.max(m_limitForce + limitForce, 0.0f);
 				limitForce = m_limitForce - oldLimitForce;
 			} else if (m_limitState == LimitState.AT_UPPER_LIMIT) {
 				final float oldLimitForce = m_limitForce;
-				m_limitForce = Math.min(m_limitForce + limitForce, 0.0f);
+				m_limitForce = MathUtils.min(m_limitForce + limitForce, 0.0f);
 				limitForce = m_limitForce - oldLimitForce;
 			}
 
@@ -333,19 +344,33 @@ public class PrismaticJoint extends Joint {
 	}
 
 	// djm pooled, using pool above too
-	private final Vec2 temp = new Vec2();
-	private final Vec2 p1 = new Vec2();
-	private final Vec2 p2 = new Vec2();
-	private final Vec2 r1z = new Vec2();
-	private final Vec2 r2z = new Vec2();
-	private final Vec2 p1z = new Vec2();
-	private final Vec2 p2z = new Vec2();
-	private final Vec2 dz = new Vec2();
+	private static final TLVec2 tltemp = new TLVec2();
+	private static final TLVec2 tlp1 = new TLVec2();
+	private static final TLVec2 tlp2 = new TLVec2();
+	private static final TLVec2 tlr1z = new TLVec2();
+	private static final TLVec2 tlr2z = new TLVec2();
+	private static final TLVec2 tlp1z = new TLVec2();
+	private static final TLVec2 tlp2z = new TLVec2();
+	private static final TLVec2 tldz = new TLVec2();
 	@Override
 	public boolean solvePositionConstraints() {
 		final Body b1 = m_body1;
 		final Body b2 = m_body2;
 
+		final Vec2 temp = tltemp.get();
+		final Vec2 p1 = tlp1.get();
+		final Vec2 p2 = tlp2.get();
+		final Vec2 r1z = tlr1z.get();
+		final Vec2 r2z = tlr2z.get();
+		final Vec2 p1z = tlp1z.get();
+		final Vec2 p2z = tlp2z.get();
+		final Vec2 dz = tldz.get();
+		final Vec2 r1 = tlr1.get();
+		final Vec2 r2 = tlr2.get();
+		final Vec2 d = tld.get();
+		final Vec2 ax1 = tlax1.get();
+		final Vec2 ay1 = tlay1.get();
+		
 		final float invMass1 = b1.m_invMass, invMass2 = b2.m_invMass;
 		final float invI1 = b1.m_invI, invI2 = b2.m_invI;
 		temp.set(m_localAnchor1);
@@ -377,7 +402,7 @@ public class PrismaticJoint extends Joint {
 		b2.m_sweep.a += invI2 * linearImpulse * m_linearJacobian.angular2;
 		//b2.SynchronizeTransform(); // updated by angular constraint
 
-		float positionError = Math.abs(linearC);
+		float positionError = MathUtils.abs(linearC);
 
 		// Solve angular constraint.
 		float angularC = b2.m_sweep.a - b1.m_sweep.a - m_refAngle;
@@ -391,7 +416,7 @@ public class PrismaticJoint extends Joint {
 		b1.synchronizeTransform();
 		b2.synchronizeTransform();
 
-		final float angularError = Math.abs(angularC);
+		final float angularError = MathUtils.abs(angularC);
 
 		// Solve linear limit constraint.
 		if (m_enableLimit && m_limitState != LimitState.INACTIVE_LIMIT)
@@ -425,7 +450,7 @@ public class PrismaticJoint extends Joint {
 				// Prevent large angular corrections
 				final float limitC = MathUtils.clamp(translation, -Settings.maxLinearCorrection, Settings.maxLinearCorrection);
 				limitImpulse = -m_motorMass * limitC;
-				positionError = MathUtils.max(positionError, Math.abs(angularC));
+				positionError = MathUtils.max(positionError, MathUtils.abs(angularC));
 			} else if (m_limitState == LimitState.AT_LOWER_LIMIT) {
 				float limitC = translation - m_lowerTranslation;
 				positionError = MathUtils.max(positionError, -limitC);
@@ -434,7 +459,7 @@ public class PrismaticJoint extends Joint {
 				limitC = MathUtils.clamp(limitC + Settings.linearSlop, -Settings.maxLinearCorrection, 0.0f);
 				limitImpulse = -m_motorMass * limitC;
 				final float oldLimitImpulse = m_limitPositionImpulse;
-				m_limitPositionImpulse = Math.max(m_limitPositionImpulse + limitImpulse, 0.0f);
+				m_limitPositionImpulse = MathUtils.max(m_limitPositionImpulse + limitImpulse, 0.0f);
 				limitImpulse = m_limitPositionImpulse - oldLimitImpulse;
 			} else if (m_limitState == LimitState.AT_UPPER_LIMIT) {
 				float limitC = translation - m_upperTranslation;
@@ -483,11 +508,16 @@ public class PrismaticJoint extends Joint {
 
 	/// Get the current joint translation, usually in meters.
 	// djm pooled, and from above
-	private final Vec2 axis = new Vec2();
+	public static final TLVec2 tlaxis = new TLVec2();
 	public float getJointTranslation() {
 		final Body b1 = m_body1;
 		final Body b2 = m_body2;
 
+		final Vec2 axis = tlaxis.get();
+		final Vec2 p1 = tlp1.get();
+		final Vec2 p2 = tlp2.get();
+		final Vec2 d = tld.get();
+		
 		b1.getWorldLocationToOut(m_localAnchor1, p1);
 		b2.getWorldLocationToOut(m_localAnchor2, p2);
 		d.set(p2);
@@ -500,14 +530,26 @@ public class PrismaticJoint extends Joint {
 
 	/// Get the current joint translation speed, usually in meters per second.
 	// djm pooled, use pool from above
-	private final Vec2 w1xAxis = new Vec2();
-	private final Vec2 v22 = new Vec2();
-	private final Vec2 w2xR2 = new Vec2();
-	private final Vec2 w1xR1 = new Vec2();
+	private static final TLVec2 tlw1xAxis = new TLVec2();
+	private static final TLVec2 tlv22 = new TLVec2();
+	private static final TLVec2 tlw2xR2 = new TLVec2();
+	private static final TLVec2 tlw1xR1 = new TLVec2();
+	
 	public float getJointSpeed() {
 		final Body b1 = m_body1;
 		final Body b2 = m_body2;
 
+		final Vec2 r1 = tlr1.get();
+		final Vec2 r2 = tlr2.get();
+		final Vec2 p1 = tlp1.get();
+		final Vec2 p2 = tlp2.get();
+		final Vec2 d = tld.get();
+		final Vec2 axis = tlaxis.get();
+		final Vec2 w1xAxis = tlw1xAxis.get();
+		final Vec2 v22 = tlv22.get();
+		final Vec2 w2xR2 = tlw2xR2.get();
+		final Vec2 w1xR1 = tlw1xR1.get();
+		
 		Mat22.mulToOut(b1.m_xf.R, m_localAnchor1.sub(b1.getMemberLocalCenter()), r1);
 		Mat22.mulToOut(b2.m_xf.R, m_localAnchor2.sub(b2.getMemberLocalCenter()), r2);
 		p1.set(b1.m_sweep.c);
@@ -550,8 +592,10 @@ public class PrismaticJoint extends Joint {
 	}
 
 	// djm pooled
-	private final Vec2 reactionAx1 = new Vec2();
+	private static final TLVec2 tlreactionAx1 = new TLVec2
+	();
 	public void getReactionForceToOut(final Vec2 out){
+		final Vec2 reactionAx1 = tlreactionAx1.get();
 		Mat22.mulToOut(m_body1.m_xf.R, m_localXAxis1, reactionAx1);
 		Mat22.mulToOut(m_body1.m_xf.R, m_localYAxis1, out);
 

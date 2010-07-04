@@ -1,10 +1,12 @@
 package org.jbox2d.dynamics.joints;
 
+import org.jbox2d.common.MathUtils;
 import org.jbox2d.common.Settings;
 import org.jbox2d.common.Vec2;
 import org.jbox2d.dynamics.Body;
 import org.jbox2d.dynamics.TimeStep;
 import org.jbox2d.dynamics.World;
+import org.jbox2d.pooling.arrays.Vec2Array;
 
 public class ConstantVolumeJoint extends Joint {
 	Body[] bodies;
@@ -16,6 +18,8 @@ public class ConstantVolumeJoint extends Joint {
 	Vec2[] normals;
 
 	TimeStep m_step;
+	private float m_impulse = 0.0f;
+
 
 	DistanceJoint[] distanceJoints;
 
@@ -64,12 +68,6 @@ public class ConstantVolumeJoint extends Joint {
 		this.m_body1 = bodies[0];
 		this.m_body2 = bodies[1];
 		this.m_collideConnected = false;
-
-		d = new Vec2[bodies.length];
-		// init pooled array
-		for(int i=0; i<bodies.length; i++){
-			d[i] = new Vec2();
-		}
 	}
 
 	@Override
@@ -102,7 +100,7 @@ public class ConstantVolumeJoint extends Joint {
 			final int next = (i==bodies.length-1)?0:i+1;
 			final float dx = bodies[next].getMemberWorldCenter().x-bodies[i].getMemberWorldCenter().x;
 			final float dy = bodies[next].getMemberWorldCenter().y-bodies[i].getMemberWorldCenter().y;
-			float dist = (float)Math.sqrt(dx*dx+dy*dy);
+			float dist = MathUtils.sqrt(dx*dx+dy*dy);
 			if (dist < Settings.EPSILON) {
 				dist = 1.0f;
 			}
@@ -138,12 +136,13 @@ public class ConstantVolumeJoint extends Joint {
 	}
 
 	// djm pooled
-	private final Vec2[] d;
-	private float m_impulse = 0.0f;
+	private static final Vec2Array tlD = new Vec2Array();
 	@Override
 	public void initVelocityConstraints(final TimeStep step) {
 		m_step = step;
-
+		
+		final Vec2[] d = tlD.get(bodies.length);
+		
 		for (int i=0; i<bodies.length; ++i) {
 			final int prev = (i==0)?bodies.length-1:i-1;
 			final int next = (i==bodies.length-1)?0:i+1;
@@ -175,6 +174,8 @@ public class ConstantVolumeJoint extends Joint {
 	public void solveVelocityConstraints(final TimeStep step) {
 		float crossMassSum = 0.0f;
 		float dotMassSum = 0.0f;
+		
+		final Vec2 d[] = tlD.get(bodies.length);
 
 		for (int i=0; i<bodies.length; ++i) {
 			final int prev = (i==0)?bodies.length-1:i-1;
